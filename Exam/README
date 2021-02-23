@@ -1,0 +1,19 @@
+Prerequisites:
+-User is created in IAM AWS and configured in the machine where bash/ansible will run
+-ansible 2.9.6
+-boto 2.49.0 / boto3 1.17.13
+-python 3.8.5
+
+Tested with:
+-Ubuntu 20.04.2 LTS
+-ansible 2.9.6
+-boto 2.49.0 / boto3 1.17.13
+-python 3.8.5
+-bash: GNU bash, version 5.0.17
+-ssh/ssh-keygen: OpenSSH_8.2p1 Ubuntu-4ubuntu0.1, OpenSSL 1.1.1f
+
+Assumption:
+Creation and deletion will be called only once (create first, then delete)
+
+Limitation:
+If create is called more than once, delete will fail to delete all resources //had no time to improve this
