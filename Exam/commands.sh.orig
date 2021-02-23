@@ -1,0 +1,17 @@
+yes | sudo apt install -f python3-flask
+rm -rf webapp.py
+echo "from flask import Flask
+
+app = Flask(__name__)
+
+@app.route(\"/\")
+def webapp():
+    return \"_INSTANCE_ID_\"
+
+if __name__ == \"__main__\":
+    app.run(host=\"0.0.0.0\",port=80)
+" &> webapp.py
+
+#sudo python3 webapp.py
+sudo nohup python3 webapp.py  > log.txt 2>&1 &
+

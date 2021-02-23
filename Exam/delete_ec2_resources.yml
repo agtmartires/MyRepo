@@ -1,0 +1,57 @@
+- name: Delete EC2 Resources
+  hosts: localhost
+
+  vars:
+    aws_region: us-east-2
+
+  tasks:
+  - name: Terminate EC2 Instance
+    ec2:
+      instance_ids: "{{ instance_id }}" 
+      region: "{{ aws_region }}"
+      state: absent
+      wait: yes
+
+  - name: Delete Key
+    ec2_key:
+      name: AutoAwsKey
+      region: "{{ aws_region }}"
+      state: absent
+      wait: yes
+      force: false
+
+  - name: Delete Security Group
+    ec2_group:
+      name: AutoSecurityGroup
+      region: "{{ aws_region }}"
+      state: absent
+
+  - name: Delete subnet
+    ec2_vpc_subnet:
+      state: absent
+      vpc_id: "{{ vpc_id }}" 
+      cidr: 10.10.0.0/20
+      region: "{{ aws_region }}"
+
+  - name: Delete gateway
+    ec2_vpc_igw:
+      vpc_id: "{{ vpc_id }}" 
+      region: "{{ aws_region }}"
+      state: absent
+
+  - name: Delete Route Table
+    ec2_vpc_route_table:
+      route_table_id: "{{ rt_id }}"
+      state: absent
+      vpc_id: "{{ vpc_id }}"
+      region: "{{ aws_region }}"
+      lookup: id
+ 
+
+  - name: Delete vpc
+    ec2_vpc_net:
+      name: AutoVpcNet
+      cidr_block: 10.10.0.0/16
+      region: "{{ aws_region }}"
+      state: absent
+

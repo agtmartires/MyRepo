@@ -1,0 +1,86 @@
+- name: create EC2 resources
+  hosts: localhost
+
+  vars:
+    aws_region: us-east-2
+    file_location: "{{ fileLocation }}"
+
+  tasks:
+
+  - name: Upload public key
+    ec2_key:
+      name: AutoAwsKey
+      region: "{{ aws_region }}" 
+      key_material: "{{ lookup('file', '{{ file_location }}') }}"
+      state: present
+      force: false
+
+  - name: Create VPC
+    ec2_vpc_net:
+      name: AutoVpcNet
+      cidr_block: 10.10.0.0/16
+      region: "{{ aws_region }}"
+      tenancy: default
+    register: AutoVpcNet 
+
+  - name: Create Internet gateway to the VPC
+    ec2_vpc_igw:
+      vpc_id: "{{ AutoVpcNet.vpc.id }}"
+      region: "{{ aws_region }}"
+      state: present 
+    register: AutoVpcIgw
+
+  - name: Create VPC subnet
+    ec2_vpc_subnet:
+      state: present 
+      vpc_id: "{{ AutoVpcNet.vpc.id }}"
+      cidr: 10.10.0.0/20
+      region: "{{ aws_region }}"
+    register: AutoVpcSubnet
+
+  - name: Create VPC subnet route table
+    ec2_vpc_route_table:
+      state: present
+      vpc_id: "{{ AutoVpcNet.vpc.id }}"
+      region: "{{ aws_region }}"
+      subnets:
+          - "{{ AutoVpcSubnet.subnet.id }}"
+      routes:
+          - dest: 0.0.0.0/0
+            gateway_id: "{{ AutoVpcIgw.gateway_id }}"
+
+  - name: Create security group
+    ec2_group:
+      name: AutoSecurityGroup
+      description: "Security group from ansible"
+      vpc_id: "{{ AutoVpcNet.vpc.id }}"
+      region: "{{ aws_region }}"
+      rules:
+          - proto: tcp
+            from_port: 22
+            to_port: 22
+            cidr_ip: 0.0.0.0/0
+          - proto: tcp
+            from_port: 80
+            to_port: 80
+            cidr_ip: 0.0.0.0/0
+          - proto: tcp
+            from_port: 443
+            to_port: 443
+            cidr_ip: 0.0.0.0/0
+      rules_egress:
+          - proto: all
+            cidr_ip: 0.0.0.0/0
+    register: AutoSecurityGroup
+
+  - name: Create EC2 instance
+    ec2:
+        instance_type: t2.micro
+        key_name: AutoAwsKey
+        image: ami-0996d3051b72b5b2c 
+        region: "{{ aws_region }}"
+        group: AutoSecurityGroup
+        vpc_subnet_id: "{{ AutoVpcSubnet.subnet.id }}" 
+        wait: yes
+        assign_public_ip: yes
+
