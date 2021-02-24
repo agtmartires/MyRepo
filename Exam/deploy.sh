@@ -13,7 +13,7 @@ then
 # Create key for AWS
 pubKeyFile="key/id_rsa.pub"
 if ! test -f "$pubKeyFile"
-then 
+then
     rm -rf key;mkdir key
     echo "Will create key pair for AWS"
     ssh-keygen -t rsa -f key/id_rsa
@@ -35,7 +35,7 @@ result=$(cat .tmp | grep "failed=0")
 if [ "${#result}" -eq 0 ]
 then
     echo -e "One of the Ansible tasks failed. Will terminate the script now."
-    cat .tmp 
+    cat .tmp
     exit
 fi
 
@@ -47,8 +47,7 @@ echo "AWS EC2 instance created"
 python parse_result.py .tmp
 
 # Connect to newly created instance and run commands in commands.sh
-fileLen=${#myvar}-4
-privateKey=${pubKeyFile:0:$fileLen}
+privateKey="key/id_rsa"
 instanceId=$(cut -d " " -f 2 .resources)
 ipAdd=$(cut -d " " -f 4 .resources)
 
