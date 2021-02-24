@@ -17,15 +17,16 @@ then
     rm -rf key;mkdir key
     echo "Will create key pair for AWS"
     ssh-keygen -t rsa -f key/id_rsa
-fi
 
-if ! test -f "$pubKeyFile"
-then
-    echo "Failed creating $pubKeyFile!"
-    exit
+    if ! test -f "$pubKeyFile"
+    then
+        echo "Failed creating $pubKeyFile!"
+        exit
+    fi
 fi
 
 echo "Creating AWS resources and instance... Please wait."
+rm -rf .resources
 
 # upload key to AWS
 ansible-playbook -v create_ec2_resources.yml --extra-vars "fileLocation=$pubKeyFile" >& .tmp
@@ -42,89 +43,17 @@ fi
 sleep 30
 echo "AWS EC2 instance created"
 
-
-# Parse logs to get routing table id, 
-input=".tmp"
-found=0
-while IFS= read -r line
-do
-    if [ $found == 1 ]; then
-        break
-    fi
-    if [[ $line =~ "[Create VPC subnet route table]" ]]; then
-        found=1
-    fi
-done < "$input"
-
-# get Route ID
-delimiter="\"route_table_id\": \""
-string=$line$delimiter
-myarray=()
-while [[ $string ]]; do
-    myarray+=( "${string%%"$delimiter"*}" )
-    string=${string#*"$delimiter"}
-done
-readarray -d"\"" -t strarr <<< "${myarray[1]}"
-routeTableId=${strarr[0]}
-echo "ROUTE TABLE ID: $routeTableId"
-
-# Get VPC ID
-delimiter="\"vpc_id\": \""
-string=$line$delimiter
-myarray=()
-while [[ $string ]]; do
-    myarray+=( "${string%%"$delimiter"*}" )
-    string=${string#*"$delimiter"}
-done
-readarray -d"\"" -t strarr <<< "${myarray[1]}"
-vpcId=${strarr[0]}
-echo "VPC ID: $vpcId"
-
-input=".tmp"
-found=0
-while IFS= read -r line
-do
-    if [ $found == 1 ]; then
-        break
-    fi
-    if [[ $line =~ "Create EC2 instance" ]]; then
-        found=1
-    fi
-done < "$input"
-
-# get INSTANCE ID
-delimiter="\"instance_ids\": [\""
-string=$line$delimiter
-myarray=()
-while [[ $string ]]; do
-    myarray+=( "${string%%"$delimiter"*}" )
-    string=${string#*"$delimiter"}
-done
-readarray -d"\"" -t strarr <<< "${myarray[1]}"
-instanceID=${strarr[0]}
-echo "INSTANCE ID: $instanceID"
-
-# get public IP
-delimiter="\"public_ip\": \""
-string=$line$delimiter
-myarray=()
-while [[ $string ]]; do
-    myarray+=( "${string%%"$delimiter"*}" )
-    string=${string#*"$delimiter"}
-done
-readarray -d"\"" -t strarr <<< "${myarray[1]}"
-ipAdd=${strarr[0]}
-echo "PUBLIC IP: $ipAdd"
-
-# save details to .resources
-echo $vpcId $instanceID $routeTableId $ipAdd >& .resources
+# parse results and save details to .resources
+python parse_result.py .tmp
 
 # Connect to newly created instance and run commands in commands.sh
 fileLen=${#myvar}-4
 privateKey=${pubKeyFile:0:$fileLen}
+instanceId=$(cut -d " " -f 2 .resources)
+ipAdd=$(cut -d " " -f 4 .resources)
 
 cp -rf commands.sh.orig commands.sh
-sed -i 's/_INSTANCE_ID_/'$instanceID'/' commands.sh
+sed -i 's/_INSTANCE_ID_/'$instanceId'/' commands.sh
 
 echo "PRIVATE KEY:  $privateKey"
 chmod 400 $privateKey
@@ -134,10 +63,24 @@ echo -e "Webserver running. Check http://$ipAdd"
 
 elif [ $1 == "delete" ]
 then
-    echo "Deleting AWS resources... Please wait."
+    if ! test -f ".resources"
+    then
+        echo "No resources created yet or already deleted. No need for cleanup."
+        exit
+    fi
+
     vpcId=$(cut -d " " -f 1 .resources)
     instanceId=$(cut -d " " -f 2 .resources)
     routeTableId=$(cut -d " " -f 3 .resources)
+    ipAdd=$(cut -d " " -f 4 .resources)
+
+    echo "Resources to be deleted:"
+    echo "VPC ID:         $vpcId"
+    echo "Instance ID:    $instanceId"
+    echo "Route Table ID: $routeTableId"
+    echo "EC2 IP Add:     $ipAdd"
+    echo "Deleting AWS resources... Please wait."
+
     ansible-playbook -v delete_ec2_resources.yml --extra-vars "vpc_id=$vpcId instance_id=$instanceId rt_id=$routeTableId" >& .tmp
     result=$(cat .tmp | grep "failed=0")
     if [ "${#result}" -eq 0 ]
@@ -146,8 +89,8 @@ then
         cat .tmp
     exit
 fi
-
     echo "Deleted resources."
+    rm -rf .resources
 else
     echo "Invalid input"
     echo "Usage: ./deploy.sh create|delete"
